@@ -1,0 +1,13 @@
+{
+  "name": "cory-martin-cubs-heatmap",
+  "version": "0.0.0",
+  "description": "Jon Lester's personal heatmap, provided by Cory Martin",
+  "main": "server.js",
+  "repository": "",
+  "author": "Cory Martin <murribu@gmail.com>",
+  "dependencies": {
+    "express": "~3.2.4",
+    "request": "^2.81.0",
+    "request-promise": "^4.2.1"
+  }
+}

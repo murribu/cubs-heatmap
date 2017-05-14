@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8">
+        <title>Cory Martin's Cubs Project</title>
+    </head>
+    <body>
+        <svg width="650" height="650" stroke="#fff" stroke-width="0.5"></svg>
+        <script src="https://d3js.org/d3.v4.min.js"></script>
+        <script src="https://d3js.org/d3-hsv.v0.1.min.js"></script>
+        <script src="https://d3js.org/d3-contour.v1.min.js"></script>
+        <script>
+            /* global d3 */
+            
+            var svg                   = d3.select("svg"),
+                width                 = +svg.attr("width"),
+                height                = +svg.attr("height"),
+                colors                = ["yellow", "brown"],
+                gridDivisions         = 9,
+                thresholdStepBy       = 3,
+                plateWidthInFeet      = 17/12,
+                colWidth              = plateWidthInFeet * 3 / gridDivisions,
+                szbAvg                = 1.57379826, // from trumedia hackathon data: select avg(szb) from pitches where year between 2013 and 2016
+                sztAvg                = 3.43498381, // from trumedia hackathon data: select avg(szt) from pitches where year between 2013 and 2016
+                strikeZoneHeight      = sztAvg - szbAvg,
+                strikeZoneStrokeWidth = 1,
+                rowHeight             = 3 / gridDivisions,
+                densities             = ["exitVelocity", "velocity"],
+                initialDensity        = densities[0],
+                legendElementWidth    = 50,
+                legendElementHeight   = 25,
+                zonesArr              = []
+                ;
+            
+            
+            var contourMap = (density) => {
+                d3.json("lester.json", (error, lester) => {
+                    
+                    lester.map((p) => {
+                        p.feetFromLeftMargin   = p.location_x + (plateWidthInFeet*1.5);
+                        p.strikeZonesFromBottomMargin = (p.location_z - szbAvg + strikeZoneHeight) / strikeZoneHeight;
+                        return p;
+                    });
+                  
+                    for (var column = 0; column < gridDivisions; column++){
+                        for (var row = 0; row < gridDivisions; row++){
+                            var zone = {};
+                            zone.pitches = lester.filter((p) => {
+                                var feetFromLeftMargin   = p.location_x + (plateWidthInFeet*1.5);                                // Start from one plate-width to the left of the plate
+                                var strikeZonesFromBottomMargin = (p.location_z - szbAvg + strikeZoneHeight) / strikeZoneHeight; // Start from one strike-zone below szb
+                                
+                                return feetFromLeftMargin >= column*colWidth 
+                                && feetFromLeftMargin < ((column+1)*colWidth)
+                                && strikeZonesFromBottomMargin >= row*rowHeight
+                                && strikeZonesFromBottomMargin < ((row+1)*rowHeight)
+                                ;
+                            });
+                            zone.margins = {left: column*colWidth, right: (column+1)*colWidth, bottom: row*rowHeight, top: (row+1)*rowHeight};
+                            zone.column = column;
+                            zone.row = row;
+                            zone.key = row + ":" + column;
+                            zone.velocity = zone.pitches.filter((p) => {
+                                return p.velocity != null;
+                            }).reduce((accumulator, currentValue, currentIndex, arr) => {
+                                return ((accumulator * currentIndex) + currentValue.velocity) / (currentIndex + 1);
+                            }, 0);
+                            zone.exitVelocity = zone.pitches.filter((p) => {
+                                return p.exit_velocity != null;
+                            }).reduce((accumulator, currentValue, currentIndex, arr) => {
+                                if (currentValue.exit_velocity == null){
+                                    return accumulator;
+                                }else{
+                                    return ((accumulator * currentIndex) + currentValue.exit_velocity) / (currentIndex + 1);
+                                }
+                            }, 0);
+                            zonesArr.push(zone);
+                        }
+                    }
+                    
+            
+                    zonesArr = zonesArr.sort((a, b) => {
+                        if (a.row != b.row){
+                            return a.row < b.row ? -1 : 1;
+                        }else{
+                            return a.column < b.column ? -1 : 1;
+                        }
+                    })
+                    
+                    var exitVelocities = zonesArr.map((z) => { return z.exitVelocity; });
+                    var velocities = zonesArr.map((z) => { return z.velocity; });
+                    
+                    var domainMin = Math.floor(d3.min(zonesArr, (d) => { return d[density] > 0 ? d[density] : 90; }));
+                    var domainMax = Math.ceil(d3.max(zonesArr, (d) => { return d[density]; }));
+                    
+                    console.log(velocities);
+                    
+                    var colorScale = d3.scaleLinear()
+                        .domain([domainMin, domainMax])
+                        //.domain([50, 100])
+                        .range(colors);
+                        
+                    svg.selectAll("path")
+                        .data(d3.contours()
+                            .size([gridDivisions, gridDivisions])
+                            .thresholds(d3.range(domainMin, domainMax, thresholdStepBy))
+                            (exitVelocities))
+                        .enter()
+                            .append("path")
+                            .attr("d", d3.geoPath(d3.geoIdentity().scale(width / gridDivisions)))
+                            .attr("fill", (d) => { return colorScale(d.value); });
+                    
+                    
+                    var strikeZone = svg.selectAll(".strike-zone")
+                        .data([0], (d) => { return d; })
+                    
+                    var strikeZoneG = strikeZone.enter().append("g").attr("class", "strike-zone-g");
+                    
+                    strikeZoneG.append("rect")
+                        .attr("x", () => { return (width / 3) - (strikeZoneStrokeWidth / 2); })
+                        .attr("y", () => { return (height / 3) - (strikeZoneStrokeWidth / 2); })
+                        .attr("width", () => { return (width / 3) - (strikeZoneStrokeWidth / 2); })
+                        .attr("height", () => { return (height / 3) - (strikeZoneStrokeWidth / 2); })
+                        .attr("stroke", "black")
+                        .attr("stroke-width", strikeZoneStrokeWidth)
+                        .attr("fill-opacity", "0")
+                        .attr("class", "strike-zone");
+                        
+                    var y = d3.scaleLinear()
+                        .domain([-0.55, 1.55])                // It should be [-1, 2], but I took 15% off the top and bottom for margin
+                        .range([height * .85, height * .15]); // It should be [height, 0], but I took 15% off the top and bottom for margin
+                        
+                    var yAxis = d3.axisRight(y)
+                        .tickSize(30)
+                        .tickFormat((d) => { return d; });
+                        
+                    var customYAxis = (g) => {
+                        g.call(yAxis);
+                        g.select(".domain").remove();
+                        g.selectAll(".tick:not(:first-of-type) line")
+                            .attr("stroke", "#777")
+                            .attr("stroke-dasharray", "2,2");
+                        g.selectAll(".tick text").attr("x", 4).attr("dy", -4);
+                    };
+                        
+                    svg.append("g").call(customYAxis);
+                    
+                    svg.append("text")
+                        .text("Strike Zone Heights above the bottom of the Strike Zone")
+                        .attr("class", "mono")
+                        .attr("text-anchor", "middle")
+                        .attr("x", - width / 2)
+                        .attr("y", 45)
+                        .attr("transform", "rotate(-90)");
+                        
+                    var x = d3.scaleLinear()
+                        .domain([-1.5*plateWidthInFeet * .85, 1.5*plateWidthInFeet * .85])  // It should be [-1.5*plateWidthInFeet, 1.5*plateWidthInFeet], but I took 15% off the left and right for margin
+                        .range([width * .85, width * .15])                                  // It should be [width, 0], but I took 15% off the left and right for margin
+                        
+                    var xAxis = d3.axisBottom(x)
+                        .tickSize(10)
+                        .tickFormat((d) => { return d; });
+                        
+                    var customXAxis = (g) => {
+                        g.call(xAxis);
+                        g.select(".domain").remove();
+                    };
+                    
+                    svg.append("g")
+                        .attr("class", "xAxis")
+                        .attr("transform", "translate(0,550)")
+                        .call(customXAxis);
+                        
+                    svg.append("text")
+                        .text("Feet")
+                        .attr("class", "mono")
+                        .attr("text-anchor", "middle")
+                        .attr("x", width / 2)
+                        .attr("y", 545);
+
+                    var legendDivisions = [];
+                    
+                    for (var i = domainMin; i <= domainMax; i = i + thresholdStepBy){
+                        legendDivisions.push(i);
+                    }
+                    var legend = svg.selectAll(".legend")
+                        .data(legendDivisions, (d) => { return d; });
+                        
+                    legend.enter().append("rect")
+                        .attr("x", (d, i) => { return legendElementWidth * i; })
+                        .attr("y", height - legendElementHeight)
+                        .attr("width", legendElementWidth)
+                        .attr("height", legendElementHeight)
+                        .style("fill", (d,i) => { return colorScale(d); })
+                        
+                    legend.enter().append("text")
+                        .attr("x", (d, i) => { return (legendElementWidth * i) + (legendElementWidth / 2); })
+                        .attr("text-anchor", "middle")
+                        .attr("y", height - (1.25 * legendElementHeight))
+                        .attr("width", legendElementWidth)
+                        .attr("height", legendElementHeight)
+                        .attr("class", "mono")
+                        .text((d) => { return d; });
+                        
+                    
+                    var header = svg.selectAll(".header")
+                        .data([initialDensity], (d) => { return d; });
+                    
+                    header.enter().append("text")
+                        .text((d) => { return "Jon Lester's Average " + d.charAt(0).toUpperCase() + d.slice(1) + " (mph)"; })
+                        .attr("x", width/2)
+                        .attr("y", 70)
+                        .attr("text-anchor", "middle")
+                        .attr("class", "header")
+                        .style("font-size", "xx-large");
+                    
+                    header.exit().remove();
+                    
+                });
+            };
+            
+            contourMap(initialDensity);
+            
+        </script>
+        <style>
+          .mono {
+            font-size: 9pt;
+            font-family: Consolas, courier;
+            font-weight: bold;
+          }
+        </style>
+    </body>
+</html>
