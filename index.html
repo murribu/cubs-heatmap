@@ -84,7 +84,7 @@
                         }else{
                             return a.column < b.column ? -1 : 1;
                         }
-                    })
+                    });
                     
                     var exitVelocities = zonesArr.map((z) => { return z.exitVelocity; });
                     var velocities = zonesArr.map((z) => { return z.velocity; });
@@ -111,7 +111,7 @@
                     
                     
                     var strikeZone = svg.selectAll(".strike-zone")
-                        .data([0], (d) => { return d; })
+                        .data([0], (d) => { return d; });
                     
                     var strikeZoneG = strikeZone.enter().append("g").attr("class", "strike-zone-g");
                     
@@ -154,7 +154,7 @@
                         
                     var x = d3.scaleLinear()
                         .domain([-1.5*plateWidthInFeet * .85, 1.5*plateWidthInFeet * .85])  // It should be [-1.5*plateWidthInFeet, 1.5*plateWidthInFeet], but I took 15% off the left and right for margin
-                        .range([width * .85, width * .15])                                  // It should be [width, 0], but I took 15% off the left and right for margin
+                        .range([width * .85, width * .15]);                                 // It should be [width, 0], but I took 15% off the left and right for margin
                         
                     var xAxis = d3.axisBottom(x)
                         .tickSize(10)
@@ -190,7 +190,7 @@
                         .attr("y", height - legendElementHeight)
                         .attr("width", legendElementWidth)
                         .attr("height", legendElementHeight)
-                        .style("fill", (d,i) => { return colorScale(d); })
+                        .style("fill", (d,i) => { return colorScale(d); });
                         
                     legend.enter().append("text")
                         .attr("x", (d, i) => { return (legendElementWidth * i) + (legendElementWidth / 2); })
